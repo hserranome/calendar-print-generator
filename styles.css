@@ -185,19 +185,6 @@ input:focus, select:focus, textarea:focus {
   color: #e5484d;
 }
 
-.presets { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
-.presets button {
-  background: var(--ui-panel-2);
-  color: #c3ccd8;
-  border: 1px solid var(--ui-line);
-  border-radius: 20px;
-  padding: 4px 11px;
-  font: inherit;
-  font-size: 11px;
-  cursor: pointer;
-}
-.presets button:hover { border-color: var(--ui-accent); color: #fff; }
-
 input[type="range"] {
   width: 100%;
   accent-color: var(--ui-accent);

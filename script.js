@@ -18,21 +18,10 @@ const PAPERS = {
   letter: { w: 215.9,  h: 279.4  },
 };
 
-const PRESETS = {
-  pastel:     ['#F8C9C9', '#F9E0B0', '#F7F0A8', '#D8EFC1', '#BFE7DA', '#C2E0F2',
-               '#C9D3F5', '#D8CAF2', '#F2CAE3', '#F7D6C5', '#E6E9D9', '#CFE2E8'],
-  earth:      ['#C0392B', '#D35400', '#F39C12', '#27AE60', '#16A085', '#2980B9',
-               '#34495E', '#8E44AD', '#9B59B6', '#E74C3C', '#7F8C8D', '#95A5A6'],
-  grayscale:  ['#E8E8E8', '#DCDCDC', '#D0D0D0', '#C4C4C4', '#B8B8B8', '#ACACAC',
-               '#A0A0A0', '#949494', '#888888', '#7C7C7C', '#707070', '#646464'],
-  ink:        ['#15213B', '#1D2F52', '#26406E', '#31508A', '#3E62A6', '#4C74C2',
-               '#5F86CE', '#7298DA', '#85AAE6', '#98BCF2', '#ABCEFF', '#BFDFFF'],
-};
-
-// default palette — quarterly blues, cycled across the 12 month slots so
-// every color mode (12 / 4 / 2 pickers) has a full backing set
-const DEFAULT_BLUES = ['#9CB7D4', '#7CA7D6', '#5D98D7', '#3D88D9'];
-const DEFAULT_PALETTE = Array.from({ length: 12 }, (_, i) => DEFAULT_BLUES[i % DEFAULT_BLUES.length]);
+// default palette — soft pastels, one base per quarter, cycled across the
+// 12 month slots so every color mode (12 / 4 / 2 pickers) has a full set
+const DEFAULT_COLORS = ['#C5EDF4', '#D7DAF2', '#F5D6E5', '#DBFAE0'];
+const DEFAULT_PALETTE = Array.from({ length: 12 }, (_, i) => DEFAULT_COLORS[i % DEFAULT_COLORS.length]);
 let masterColors = DEFAULT_PALETTE.slice();
 
 const HEADER_H  = 17;   // mm reserved for title + weekday rows
@@ -498,21 +487,6 @@ function buildPaletteUI() {
     row.appendChild(hexIn);
     wrap.appendChild(row);
   }
-
-  const presets = $('#presets');
-  presets.innerHTML = '';
-  for (const [name, colors] of Object.entries(PRESETS)) {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.textContent = name[0].toUpperCase() + name.slice(1);
-    btn.addEventListener('click', () => setMaster(colors));
-    presets.appendChild(btn);
-  }
-  const blueBtn = document.createElement('button');
-  blueBtn.type = 'button';
-  blueBtn.textContent = 'Blues';
-  blueBtn.addEventListener('click', () => setMaster(DEFAULT_BLUES));
-  presets.appendChild(blueBtn);
 }
 
 function wireUI() {
