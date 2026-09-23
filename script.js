@@ -43,7 +43,9 @@ const SIDE_WK   = '8mm';
 // number of visible color pickers depends on the color mode
 function paletteSlots() {
   const mode = $('#colorMode').value;
-  return mode === 'month' ? 12 : mode === 'quarter' ? 4 : 2;
+  if (mode === 'month') return 12;
+  if (mode === 'quarter' || mode === 'gradient') return 4;
+  return 2;
 }
 
 /* ------------------------------- helpers ------------------------------ */
@@ -125,6 +127,12 @@ function readState() {
   for (let m = 0; m < 12; m++) {
     if (mode === 'quarter') colorOf[m] = monthColors[Math.floor(m / 3) % 12];
     else if (mode === 'alternate') colorOf[m] = monthColors[m % 2];
+    else if (mode === 'gradient') {
+      // one base color per quarter; 1st month = exact base, the rest fade lighter
+      const base = monthColors[Math.floor(m / 3) % 4];
+      const step = [0, 0.45, 0.75][m % 3]; // base → lighter → lightest
+      colorOf[m] = step === 0 ? base : mixHex(base, step);
+    }
     else colorOf[m] = monthColors[m % 12];
   }
 
