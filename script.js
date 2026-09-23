@@ -80,19 +80,6 @@ function normalizeHex(raw) {
   return /^[0-9A-F]{6}$/.test(h) ? '#' + h : null;
 }
 
-// Accepts a JSON array, a comma/space separated list, or anything with hex
-// tokens inside: '["9CB7D4","7CA7D6"]', '#9CB7D4 #7CA7D6', '9CB7D4, 7CA7D6'
-function parseColors(str) {
-  const out = [];
-  const re = /#?[0-9a-fA-F]{3,6}/g;
-  let m;
-  while ((m = re.exec(str || '')) !== null) {
-    const h = normalizeHex(m[0]);
-    if (h && out.indexOf(h) === -1) out.push(h);
-  }
-  return out;
-}
-
 // set the internal 12-slot master palette (cycling short arrays), rebuild
 // the visible pickers and re-render
 function setMaster(colors, keepColors) {
@@ -103,16 +90,6 @@ function setMaster(colors, keepColors) {
     buildPaletteUI();
     render();
   }
-}
-
-function applyCustomPalette() {
-  const colors = parseColors($('#paletteInput').value);
-  if (!colors.length) {
-    $('#status').textContent = 'No valid hex colors found — paste like ["9CB7D4","7CA7D6"]';
-    return;
-  }
-  $('#paletteInput').value = JSON.stringify(colors);
-  setMaster(colors);
 }
 
 /* --------------------------- state + UI config ------------------------- */
@@ -479,18 +456,47 @@ function updatePrintStyle(s) {
 function buildPaletteUI() {
   const wrap = $('#palette');
   wrap.innerHTML = '';
-  // visible pickers mirror the master palette; count depends on color mode
+  // visible pickers mirror the master palette; count depends on color mode.
+  // each picker is a row: color swatch + editable hex field.
   const n = paletteSlots();
   for (let i = 0; i < n; i++) {
-    const inp = document.createElement('input');
-    inp.type = 'color';
-    inp.value = masterColors[i];
-    inp.dataset.i = i;
-    inp.title = 'Color ' + (i + 1);
-    inp.addEventListener('input', () => {
-      masterColors[i] = normalizeHex(inp.value) || masterColors[i];
+    const row = document.createElement('div');
+    row.className = 'swatch-row';
+
+    const swatch = document.createElement('input');
+    swatch.type = 'color';
+    swatch.value = masterColors[i];
+    swatch.dataset.i = i;
+    swatch.title = 'Color ' + (i + 1);
+    swatch.addEventListener('input', () => {
+      masterColors[i] = normalizeHex(swatch.value) || masterColors[i];
+      hexIn.value = masterColors[i];
     });
-    wrap.appendChild(inp);
+
+    const hexIn = document.createElement('input');
+    hexIn.type = 'text';
+    hexIn.className = 'hex-input';
+    hexIn.spellcheck = false;
+    hexIn.value = masterColors[i];
+    hexIn.dataset.i = i;
+    hexIn.addEventListener('input', () => {
+      const norm = normalizeHex(hexIn.value);
+      if (norm) {
+        masterColors[i] = norm;
+        swatch.value = norm;
+        hexIn.classList.remove('invalid');
+      } else {
+        hexIn.classList.add('invalid');
+      }
+    });
+    hexIn.addEventListener('blur', () => {
+      hexIn.value = masterColors[i];
+      hexIn.classList.remove('invalid');
+    });
+
+    row.appendChild(swatch);
+    row.appendChild(hexIn);
+    wrap.appendChild(row);
   }
 
   const presets = $('#presets');
@@ -531,11 +537,6 @@ function wireUI() {
   $('#colorMode').addEventListener('change', () => {
     buildPaletteUI();
     render();
-  });
-
-  $('#paletteApply').addEventListener('click', applyCustomPalette);
-  $('#paletteInput').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') applyCustomPalette();
   });
 
   $('#printBtn').addEventListener('click', () => window.print());
