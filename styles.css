@@ -1,0 +1,446 @@
+/* ============================================================
+   Planner Calendar Generator — styles
+   Screen UI + print layout. All print geometry is in millimetres
+   so the on-screen preview matches the printed sheet.
+   ============================================================ */
+
+:root {
+  --ui-bg: #12161c;
+  --ui-panel: #1a2029;
+  --ui-panel-2: #222a35;
+  --ui-line: #2e3846;
+  --ui-text: #e6ecf4;
+  --ui-dim: #8b98a9;
+  --ui-accent: #5aa9ff;
+
+  --paper-w: 297mm;
+  --paper-h: 210mm;
+  --mt: 10mm;
+  --mr: 10mm;
+  --mb: 10mm;
+  --ml: 10mm;
+
+  --cell-h: 10mm;
+  --cell-pad: 1.2mm;
+  --head-h: 16mm;
+
+  --w-q: 7mm;
+  --w-m: 9mm;
+  --w-wk: 8mm;
+
+  --grid: #b9c2cc;
+  --grid-strong: #2b3038;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+}
+
+body {
+  font-family: "Inter", "Segoe UI", system-ui, -apple-system, Helvetica, Arial, sans-serif;
+  background: var(--ui-bg);
+  color: var(--ui-text);
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+.app {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* ------------------------- Settings panel ------------------------- */
+
+.panel {
+  background: var(--ui-panel);
+  border-right: 1px solid var(--ui-line);
+  padding: 18px 16px 28px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.brand h1 {
+  margin: 0;
+  font-size: 17px;
+  letter-spacing: .4px;
+}
+.brand p {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--ui-dim);
+}
+
+.group {
+  margin-top: 22px;
+  padding-top: 16px;
+  border-top: 1px solid var(--ui-line);
+}
+.group h2 {
+  margin: 0 0 12px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+  color: var(--ui-dim);
+}
+
+.field {
+  display: block;
+  margin-bottom: 13px;
+  font-size: 12px;
+}
+.field > span {
+  display: block;
+  margin-bottom: 5px;
+  color: #c3ccd8;
+}
+.field > span em {
+  color: var(--ui-dim);
+  font-style: normal;
+  font-size: 11px;
+}
+.field code {
+  background: var(--ui-panel-2);
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-size: 10.5px;
+}
+
+input[type="number"],
+input[type="text"],
+select,
+textarea {
+  width: 100%;
+  background: var(--ui-panel-2);
+  color: var(--ui-text);
+  border: 1px solid var(--ui-line);
+  border-radius: 6px;
+  padding: 7px 9px;
+  font: inherit;
+  font-size: 12px;
+}
+textarea { resize: vertical; font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+input:focus, select:focus, textarea:focus {
+  outline: none;
+  border-color: var(--ui-accent);
+}
+
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.mini { font-size: 10.5px; }
+.mini i { display: block; color: var(--ui-dim); font-style: normal; margin-bottom: 3px; }
+.mini input { padding: 6px 6px; text-align: center; }
+
+.radio-row { display: flex; gap: 8px; }
+.radio, .check {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+  font-size: 12px;
+  user-select: none;
+}
+.radio i, .check i { font-style: normal; }
+.radio input, .check input { accent-color: var(--ui-accent); margin: 0; }
+.toggles { display: grid; gap: 8px; }
+.check.standalone { margin-bottom: 13px; }
+
+/* palette */
+.palette {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(32px, 1fr));
+  gap: 6px;
+}
+.palette input[type="color"] {
+  width: 100%;
+  height: 30px;
+  padding: 0;
+  border: 1px solid var(--ui-line);
+  border-radius: 6px;
+  background: none;
+  cursor: pointer;
+}
+.palette input[type="color"]::-webkit-color-swatch-wrapper { padding: 3px; }
+.palette input[type="color"]::-webkit-color-swatch { border: none; border-radius: 3px; }
+
+.palette-row { display: flex; gap: 6px; }
+.palette-row input[type="text"] { flex: 1; min-width: 0; font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 11px; }
+.palette-row button {
+  background: var(--ui-panel-2);
+  color: #c3ccd8;
+  border: 1px solid var(--ui-line);
+  border-radius: 6px;
+  padding: 7px 12px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.palette-row button:hover { border-color: var(--ui-accent); color: #fff; }
+
+.presets { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
+.presets button {
+  background: var(--ui-panel-2);
+  color: #c3ccd8;
+  border: 1px solid var(--ui-line);
+  border-radius: 20px;
+  padding: 4px 11px;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.presets button:hover { border-color: var(--ui-accent); color: #fff; }
+
+input[type="range"] {
+  width: 100%;
+  accent-color: var(--ui-accent);
+}
+.field output { color: var(--ui-accent); font-variant-numeric: tabular-nums; }
+
+.print-btn {
+  width: 100%;
+  margin-top: 20px;
+  padding: 12px;
+  border: none;
+  border-radius: 8px;
+  background: var(--ui-accent);
+  color: #06121f;
+  font: inherit;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+}
+.print-btn:hover { filter: brightness(1.08); }
+.hint {
+  font-size: 11px;
+  color: var(--ui-dim);
+  line-height: 1.5;
+  margin: 10px 2px 0;
+}
+
+/* ------------------------- Preview ------------------------- */
+
+.preview {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.preview-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--ui-line);
+  background: var(--ui-panel);
+}
+.status { font-size: 12px; color: var(--ui-dim); }
+.zoom { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--ui-dim); }
+.zoom input { width: 160px; }
+
+.preview-scroll {
+  flex: 1;
+  overflow: auto;
+  padding: 24px;
+  background:
+    radial-gradient(circle at 50% 0%, #1d2530 0%, var(--ui-bg) 60%);
+}
+
+.pages {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  align-items: flex-start;
+  zoom: 0.75;
+}
+
+/* ------------------------- Printed page ------------------------- */
+
+.page {
+  width: var(--paper-w);
+  min-height: var(--paper-h);
+  padding: var(--mt) var(--mr) var(--mb) var(--ml);
+  background: #fff;
+  color: #14171c;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .5);
+  display: grid;
+  grid-template-columns: var(--w-q) var(--w-m) var(--w-wk) repeat(7, 1fr);
+  grid-auto-rows: auto;
+  align-content: start;
+  font-size: 3mm;
+}
+
+/* header */
+.head-title {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: baseline;
+  gap: 6mm;
+  border-bottom: .6mm solid var(--grid-strong);
+  padding-bottom: 1.2mm;
+  margin-bottom: 1mm;
+  height: 11.5mm;
+}
+.head-title .t-main {
+  font-size: 9mm;
+  font-weight: 800;
+  letter-spacing: .5mm;
+  line-height: 1;
+}
+.head-title .t-sub {
+  font-size: 3mm;
+  letter-spacing: .8mm;
+  text-transform: uppercase;
+  color: #5b6470;
+}
+.head-title .t-page {
+  margin-left: auto;
+  font-size: 3mm;
+  letter-spacing: .5mm;
+  color: #5b6470;
+  text-transform: uppercase;
+}
+
+.head-cell {
+  font-size: 2.4mm;
+  letter-spacing: .3mm;
+  text-transform: uppercase;
+  color: #49505a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: .6mm 0;
+  border-bottom: .35mm solid var(--grid-strong);
+  height: 4.5mm;
+}
+
+.wd {
+  font-weight: 700;
+  font-size: 2.8mm;
+  letter-spacing: .6mm;
+  border-right: .2mm solid var(--grid);
+}
+
+/* sidebar */
+.q-cell, .m-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-right: .2mm solid var(--grid);
+  border-bottom: .2mm solid var(--grid);
+  margin: 0;
+  font-weight: 700;
+  letter-spacing: .4mm;
+  overflow: hidden;
+}
+.q-cell { font-size: 2.6mm; color: #3a414b; }
+.m-cell {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  transform: rotate(180deg);
+  font-size: 3.2mm;
+}
+.q-cell { writing-mode: horizontal-tb; }
+.q-cell span, .m-cell span { display: block; }
+
+.wk-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2.2mm;
+  color: #6a727d;
+  border-bottom: .2mm solid var(--grid);
+  font-variant-numeric: tabular-nums;
+  /* the strong separator line lives on .day.col0 / .head-cell.col0 so it
+     survives when the week column is collapsed */
+}
+
+/* boundary line between the sidebar and the first day column — always
+   present, independent of the quarter / week toggles */
+.day.col0,
+.head-cell.col0 {
+  border-left: .35mm solid var(--grid-strong);
+}
+
+/* day cells */
+.day {
+  position: relative;
+  border-right: .2mm solid var(--grid);
+  border-bottom: .2mm solid var(--grid);
+  padding: var(--cell-pad);
+  overflow: hidden;
+}
+.day.blank { background: #fff; }
+.day.weekend { background-image: linear-gradient(rgba(0, 0, 0, .045), rgba(0, 0, 0, .045)); }
+.day .dnum {
+  font-size: 2.7mm;
+  font-weight: 600;
+  line-height: 1;
+  color: #1d222a;
+}
+.day.weekend .dnum { color: #4a525d; }
+.day .evts {
+  margin-top: .6mm;
+  display: flex;
+  flex-direction: column;
+  gap: .3mm;
+}
+.day .evt {
+  font-size: 1.9mm;
+  line-height: 1.15;
+  padding: .25mm .6mm;
+  border-radius: .8mm;
+  background: rgba(20, 25, 33, .82);
+  color: #fff;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* per-month tint / solid classes (colors injected via CSS vars) */
+.t0  { background-color: var(--c0t); }  .s0  { background: var(--c0);  color: var(--c0x); }
+.t1  { background-color: var(--c1t); }  .s1  { background: var(--c1);  color: var(--c1x); }
+.t2  { background-color: var(--c2t); }  .s2  { background: var(--c2);  color: var(--c2x); }
+.t3  { background-color: var(--c3t); }  .s3  { background: var(--c3);  color: var(--c3x); }
+.t4  { background-color: var(--c4t); }  .s4  { background: var(--c4);  color: var(--c4x); }
+.t5  { background-color: var(--c5t); }  .s5  { background: var(--c5);  color: var(--c5x); }
+.t6  { background-color: var(--c6t); }  .s6  { background: var(--c6);  color: var(--c6x); }
+.t7  { background-color: var(--c7t); }  .s7  { background: var(--c7);  color: var(--c7x); }
+.t8  { background-color: var(--c8t); }  .s8  { background: var(--c8);  color: var(--c8x); }
+.t9  { background-color: var(--c9t); }  .s9  { background: var(--c9);  color: var(--c9x); }
+.t10 { background-color: var(--c10t); } .s10 { background: var(--c10); color: var(--c10x); }
+.t11 { background-color: var(--c11t); } .s11 { background: var(--c11); color: var(--c11x); }
+
+/* ------------------------- Print ------------------------- */
+
+@media print {
+  /* @page size + margin are injected into #print-style by script.js */
+
+  html, body { background: #fff !important; height: auto; }
+
+  .panel, .preview-bar { display: none !important; }
+
+  .app { display: block; height: auto; overflow: visible; }
+  .preview { display: block; overflow: visible; }
+  .preview-scroll { overflow: visible; padding: 0; background: none; }
+  .pages { zoom: 1 !important; gap: 0; display: block; }
+
+  .page {
+    width: auto;
+    min-height: 0;
+    padding: 0;
+    margin: 0;
+    box-shadow: none !important;
+    break-inside: avoid;
+    page-break-inside: avoid;
+    overflow: hidden;
+  }
+  .page + .page { break-before: page; page-break-before: always; }
+}

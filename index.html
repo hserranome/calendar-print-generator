@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Planner Calendar Generator</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app">
+    <!-- ============ SETTINGS PANEL ============ -->
+    <aside class="panel" id="panel">
+      <div class="brand">
+        <h1>Planner Calendar</h1>
+        <p>Year-at-a-glance generator</p>
+      </div>
+
+      <section class="group">
+        <h2>Date &amp; Structure</h2>
+
+        <label class="field">
+          <span>Mode</span>
+          <select id="mode">
+            <option value="year">Specific year</option>
+            <option value="generic" selected>Generic (year-agnostic)</option>
+          </select>
+        </label>
+
+        <label class="field" id="yearField">
+          <span>Year</span>
+          <input type="number" id="year" min="1900" max="2200" step="1" value="2026" />
+        </label>
+
+        <div class="field" id="weekStartField">
+          <span>Week starts on</span>
+          <div class="radio-row">
+            <label class="radio"><input type="radio" name="ws" value="sun" checked /><i>Sun</i></label>
+            <label class="radio"><input type="radio" name="ws" value="mon" /><i>Mon</i></label>
+          </div>
+        </div>
+
+        <label class="field">
+          <span>Header title</span>
+          <input type="text" id="headerTitle" placeholder="(auto: year / PLANNER)" />
+        </label>
+
+        <div class="field">
+          <span>Show</span>
+          <div class="toggles">
+            <label class="check"><input type="checkbox" id="showWeeks" /><i>Week numbers</i></label>
+            <label class="check"><input type="checkbox" id="showQuarters" checked /><i>Quarter labels</i></label>
+            <label class="check"><input type="checkbox" id="showEvents" checked /><i>Custom events</i></label>
+          </div>
+        </div>
+
+        <label class="field">
+          <span>Custom events <em>one per line: <code>MM-DD, Label</code></em></span>
+          <textarea id="events" rows="4" spellcheck="false" placeholder="1-01, New Year&#10;12-25, Christmas&#10;7-04, Independence Day"></textarea>
+        </label>
+      </section>
+
+      <section class="group">
+        <h2>Styling &amp; Colors</h2>
+
+        <label class="field">
+          <span>Color mode</span>
+          <select id="colorMode">
+            <option value="month">Per month</option>
+            <option value="quarter" selected>Per quarter</option>
+            <option value="alternate">Alternating</option>
+          </select>
+        </label>
+
+        <div class="field">
+          <span>Month palette</span>
+          <div class="palette" id="palette"></div>
+          <div class="presets" id="presets"></div>
+        </div>
+
+        <div class="field">
+          <span>Custom palette <em>paste hex colors</em></span>
+          <div class="palette-row">
+            <input type="text" id="paletteInput" spellcheck="false"
+              placeholder='["9CB7D4","7CA7D6","5D98D7","3D88D9"]' />
+            <button type="button" id="paletteApply">Apply</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="group">
+        <h2>Print &amp; Layout</h2>
+
+        <div class="grid2">
+          <label class="field">
+            <span>Paper</span>
+            <select id="paper">
+              <option value="a4">A4</option>
+              <option value="letter">Letter</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Orientation</span>
+            <select id="orient">
+              <option value="landscape">Landscape</option>
+              <option value="portrait">Portrait</option>
+            </select>
+          </label>
+        </div>
+
+        <label class="field">
+          <span>Page split</span>
+          <select id="split">
+            <option value="1">1 page (full year)</option>
+            <option value="2">2 pages (half-year)</option>
+            <option value="4" selected>4 pages (quarterly)</option>
+          </select>
+        </label>
+
+        <label class="check standalone">
+          <input type="checkbox" id="repeatHeader" /><i>Repeat title &amp; header on every page</i>
+        </label>
+
+        <div class="field">
+          <span>Page margins (mm)</span>
+          <div class="grid4">
+            <label class="mini"><i>Top</i><input type="number" id="mt" value="10" min="0" max="60" step="1" /></label>
+            <label class="mini"><i>Right</i><input type="number" id="mr" value="10" min="0" max="60" step="1" /></label>
+            <label class="mini"><i>Bottom</i><input type="number" id="mb" value="10" min="0" max="60" step="1" /></label>
+            <label class="mini"><i>Left</i><input type="number" id="ml" value="10" min="0" max="60" step="1" /></label>
+          </div>
+        </div>
+
+        <label class="check standalone">
+          <input type="checkbox" id="autoFit" checked /><i>Auto-fit rows to page</i>
+        </label>
+
+        <label class="field">
+          <span>Cell height <output id="cellHOut">10 mm</output></span>
+          <input type="range" id="cellH" min="4" max="40" step="0.5" value="10" />
+        </label>
+
+        <label class="field">
+          <span>Cell padding <output id="cellPadOut">1.2 mm</output></span>
+          <input type="range" id="cellPad" min="0" max="6" step="0.1" value="1.2" />
+        </label>
+      </section>
+
+      <button type="button" class="print-btn" id="printBtn">Print / Save as PDF</button>
+      <p class="hint">Tip: in the print dialog enable <b>Background graphics</b> so colors print.</p>
+    </aside>
+
+    <!-- ============ PREVIEW ============ -->
+    <main class="preview">
+      <div class="preview-bar">
+        <div class="status" id="status">Ready</div>
+        <label class="zoom">
+          <span>Zoom</span>
+          <input type="range" id="zoom" min="0.25" max="1.5" step="0.05" value="0.75" />
+        </label>
+      </div>
+      <div class="preview-scroll">
+        <div class="pages" id="pages"></div>
+      </div>
+    </main>
+  </div>
+
+  <style id="print-style"></style>
+  <script src="script.js"></script>
+</body>
+</html>
