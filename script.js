@@ -115,6 +115,7 @@ function readState() {
     colorOf,
     split: parseInt($('#split').value, 10) || 1,
     repeatHeader: $('#repeatHeader').checked,
+    showRange: $('#showRange').checked,
     paperW: landscape ? paper.h : paper.w,
     paperH: landscape ? paper.w : paper.h,
     mt: n('#mt'), mr: n('#mr'), mb: n('#mb'), ml: n('#ml'),
@@ -322,7 +323,7 @@ function render() {
       head.innerHTML =
         '<span class="t-main">' + esc(title) + '</span>' +
         (sub ? '<span class="t-sub">' + esc(sub) + '</span>' : '') +
-        (pages.length > 1 ? '<span class="t-page">' +
+        (pages.length > 1 && s.showRange ? '<span class="t-page">' +
           (s.split === 2 ? (pi === 0 ? 'Jan – Jun' : 'Jul – Dec') : 'Q' + (pi + 1)) +
           '</span>' : '');
       page.appendChild(head);
