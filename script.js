@@ -292,8 +292,8 @@ function render() {
     '--w-wk': s.showWeeks ? SIDE_WK : '0mm',
   };
 
-  const title = s.headerTitle
-    || (s.mode === 'year' ? String(s.year) : 'PLANNER');
+  // header title is fully user-controlled: empty (or whitespace) = hidden
+  const title = s.headerTitle;
 
   pages.forEach((pageRows, pi) => {
     const page = document.createElement('div');
@@ -321,7 +321,7 @@ function render() {
       head.className = 'head-title';
       const sub = s.subtitle || '';
       head.innerHTML =
-        '<span class="t-main">' + esc(title) + '</span>' +
+        (title ? '<span class="t-main">' + esc(title) + '</span>' : '') +
         (sub ? '<span class="t-sub">' + esc(sub) + '</span>' : '') +
         (pages.length > 1 && s.showRange ? '<span class="t-page">' +
           (s.split === 2 ? (pi === 0 ? 'Jan – Jun' : 'Jul – Dec') : 'Q' + (pi + 1)) +
