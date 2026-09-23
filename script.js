@@ -107,6 +107,7 @@ function readState() {
     year: Math.max(1900, Math.min(2200, parseInt($('#year').value, 10) || 2026)),
     weekStart: document.querySelector('input[name="ws"]:checked').value === 'mon' ? 1 : 0,
     headerTitle: $('#headerTitle').value.trim(),
+    subtitle: $('#subtitle').value.trim(),
     showWeeks: $('#showWeeks').checked,
     showQuarters: $('#showQuarters').checked,
     showEvents: $('#showEvents').checked,
@@ -317,9 +318,10 @@ function render() {
       // ---- title bar ----
       const head = document.createElement('div');
       head.className = 'head-title';
+      const sub = s.subtitle || '';
       head.innerHTML =
         '<span class="t-main">' + esc(title) + '</span>' +
-        '<span class="t-sub">Year at a glance</span>' +
+        (sub ? '<span class="t-sub">' + esc(sub) + '</span>' : '') +
         (pages.length > 1 ? '<span class="t-page">' +
           (s.split === 2 ? (pi === 0 ? 'Jan – Jun' : 'Jul – Dec') : 'Q' + (pi + 1)) +
           '</span>' : '');
