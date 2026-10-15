@@ -11,6 +11,7 @@
 /* ----------------------------- constants ----------------------------- */
 
 const MONTHS   = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+const MONTHS_TITLE = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const WEEKDAYS = ['SUN','MON','TUE','WED','THU','FRI','SAT'];
 const FIXED_LEN = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
 
@@ -102,6 +103,7 @@ function readState() {
     weekStart: document.querySelector('input[name="ws"]:checked').value === 'mon' ? 1 : 0,
     headerTitle: $('#headerTitle').value.trim(),
     subtitle: $('#subtitle').value.trim(),
+    footerText: $('#footerText').value.trim(),
     showWeeks: $('#showWeeks').checked,
     showQuarters: $('#showQuarters').checked,
     showMonthLines: $('#showMonthLines').checked,
@@ -183,9 +185,19 @@ function makeRow(cells, weekNo) {
 
 /* ------------------------------ page split ----------------------------- */
 
+// months (0-11) that begin a new page, for any page count
+function cutMonths(split) {
+  const cuts = [];
+  for (let k = 1; k < split; k++) {
+    const m = Math.round((12 * k) / split);
+    if (m > 0 && m < 12 && cuts[cuts.length - 1] !== m) cuts.push(m);
+  }
+  return cuts;
+}
+
 function splitPages(rows, split) {
-  if (split === 1) return [rows];
-  const cutAt = split === 2 ? [6] : [3, 6, 9]; // months that start a new page
+  if (split <= 1) return [rows];
+  const cutAt = cutMonths(split); // months that start a new page
   const pages = [];
   let cur = [];
   let prevHadCut = false;
@@ -238,6 +250,10 @@ function spansOf(rows, gridRowBase) {
       }
     });
   });
+
+  // a leading month whose day 1 is not on this page is spillover from the
+  // previous page — it gets no sidebar block of its own
+  while (order.length && startRow[order[0]] === undefined) order.shift();
 
   const months = order.map((m, i) => {
     const next = order[i + 1];
@@ -407,8 +423,11 @@ function drawPage(doc, s, pageRows, pi, pages, cellH, events) {
     }
     if (s.subtitle) text(tx, baseline, s.subtitle, { mm: 3, color: '#5b6470' });
     if (pages.length > 1 && s.showRange) {
-      const label = s.split === 2 ? (pi === 0 ? 'Jan – Jun' : 'Jul – Dec') : 'Q' + (pi + 1);
-      text(gridX2, baseline, label, { mm: 3, color: '#5b6470', align: 'right' });
+      const cuts = cutMonths(s.split);
+      const lo = pi === 0 ? 0 : (cuts[pi - 1] != null ? cuts[pi - 1] : 0);
+      const hi = ((pi < cuts.length ? cuts[pi] : 12) - 1);
+      text(gridX2, baseline, MONTHS_TITLE[lo] + ' – ' + MONTHS_TITLE[hi],
+        { mm: 3, color: '#5b6470', align: 'right' });
     }
     line(x0, s.mt + TITLE_H, gridX2, s.mt + TITLE_H, C_STRONG, 0.6);
 
@@ -459,7 +478,9 @@ function drawPage(doc, s, pageRows, pi, pages, cellH, events) {
     const label = MONTHS[sp.m];
     const tw = PdfWriter.textWidth(label, 3.2 * PT, true) / PT; // mm
     rectFill(colX[1], y, wm, h, col);
-    textV(colX[1] + wm / 2, y + h / 2 + tw / 2, label, { mm: 3.2, bold: true, color: contrast(col) });
+    if (h >= tw + 1.5) {
+      textV(colX[1] + wm / 2, y + h / 2 + tw / 2, label, { mm: 3.2, bold: true, color: contrast(col) });
+    }
     line(colX[2], y, colX[2], y + h, C_GRID, 0.2);
     line(colX[1], y + h, colX[2], y + h, C_GRID, 0.2);
     if (monthStartRows.has(sp.start)) line(colX[1], y, colX[2], y, C_STRONG, 0.5);
@@ -541,6 +562,12 @@ function drawPage(doc, s, pageRows, pi, pages, cellH, events) {
       }
     });
   });
+
+  /* ---- footer (centred, greyed) ---- */
+  if (s.footerText) {
+    const fy = s.paperH - Math.max(s.mb / 2, 2) + 1;
+    text((x0 + gridX2) / 2, fy, s.footerText, { mm: 3, color: '#9aa3ad', align: 'center' });
+  }
 }
 
 /* --------------------------- settings persistence -----------------------
