@@ -1,8 +1,9 @@
 /* ============================================================
    Planner Calendar Generator — engine
-   Plain JS. Builds the continuous-flow calendar grid as a
-   single CSS grid per printed page, with sidebar labels and
-   live re-rendering on every settings change.
+   Plain JS. Builds the continuous-flow calendar grid, then draws
+   it into a real PDF (no dependencies) that the browser's own PDF
+   viewer shows on the right. What you see is what Download/Print
+   produce.
    ============================================================ */
 
 'use strict';
@@ -24,10 +25,18 @@ const DEFAULT_COLORS = ['#C5EDF4', '#D7DAF2', '#F5D6E5', '#DBFAE0'];
 const DEFAULT_PALETTE = Array.from({ length: 12 }, (_, i) => DEFAULT_COLORS[i % DEFAULT_COLORS.length]);
 let masterColors = DEFAULT_PALETTE.slice();
 
-const HEADER_H  = 17;   // mm reserved for title + weekday rows
-const SIDE_Q    = '7mm';
-const SIDE_M    = '9mm';
-const SIDE_WK   = '8mm';
+const HEADER_H = 17;      // mm reserved for title + weekday rows (auto-fit)
+const SIDE_W   = { q: 7, m: 9, wk: 8 };   // sidebar column widths in mm
+const TITLE_H  = 11.5;    // title band height (mm)
+const TITLE_GAP = 1;      // gap under the title rule (mm)
+const WD_H     = 4.5;     // weekday header band height (mm)
+
+const PT = 72 / 25.4;     // points per millimetre
+
+const C_GRID   = '#b9c2cc';
+const C_STRONG = '#2b3038';
+const C_NUM    = '#1d222a';
+const C_NUM_WK = '#4a525d';
 
 // number of visible color pickers depends on the color mode
 function paletteSlots() {
@@ -57,9 +66,6 @@ function contrast(hex) {
   return lum > 0.62 ? '#20242b' : '#ffffff';
 }
 function fmt(v) { return (Math.round(v * 100) / 100).toString(); }
-function esc(s) {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
 
 /* ------------------------------ palette input --------------------------- */
 
@@ -67,18 +73,6 @@ function normalizeHex(raw) {
   let h = String(raw || '').trim().replace(/^#/, '').toUpperCase();
   if (/^[0-9A-F]{3}$/.test(h)) h = h.split('').map((c) => c + c).join('');
   return /^[0-9A-F]{6}$/.test(h) ? '#' + h : null;
-}
-
-// set the internal 12-slot master palette (cycling short arrays), rebuild
-// the visible pickers and re-render
-function setMaster(colors, keepColors) {
-  for (let i = 0; i < 12; i++) {
-    masterColors[i] = normalizeHex(colors[i % colors.length]) || masterColors[i];
-  }
-  if (!keepColors) {
-    buildPaletteUI();
-    render();
-  }
 }
 
 /* --------------------------- state + UI config ------------------------- */
@@ -110,6 +104,8 @@ function readState() {
     subtitle: $('#subtitle').value.trim(),
     showWeeks: $('#showWeeks').checked,
     showQuarters: $('#showQuarters').checked,
+    showMonthLines: $('#showMonthLines').checked,
+    showOutOfRange: $('#showOutOfRange').checked,
     showEvents: $('#showEvents').checked,
     eventsText: $('#events').value,
     colorOf,
@@ -127,8 +123,8 @@ function readState() {
 function n(sel) { return parseFloat($(sel).value) || 0; }
 
 /* ------------------------------ calendar model -------------------------
-   Produces a flat list of rows. Each row: { weekNo, cells: [7], primaryMonth }
-   A cell is { month, day }  (month 0-11) or null for an empty slot.
+   Produces a flat list of rows -> { weekNo, cells: [7] }.
+   A cell is { month, day } (month 0-11) or null for an empty slot.
    ---------------------------------------------------------------------- */
 
 function daysInMonth(year, m) {
@@ -142,12 +138,25 @@ function buildModel(s) {
   if (s.mode === 'year') {
     // Real year: continuous flow — a month continues on the row of the next.
     const offset = (new Date(s.year, 0, 1).getDay() - s.weekStart + 7) % 7;
-    const flat = new Array(offset).fill(null);
+    const flat = [];
+
+    // days before Jan 1 (previous December) — shown greyed when enabled
+    for (let i = offset; i >= 1; i--) {
+      const dt = new Date(s.year, 0, 1 - i);
+      flat.push(s.showOutOfRange
+        ? { month: dt.getMonth(), day: dt.getDate(), out: true }
+        : null);
+    }
     for (let m = 0; m < 12; m++) {
       const len = daysInMonth(s.year, m);
       for (let d = 1; d <= len; d++) flat.push({ month: m, day: d });
     }
-    while (flat.length % 7) flat.push(null);
+    // days after Dec 31 (next January)
+    let j = 1;
+    while (flat.length % 7) {
+      flat.push(s.showOutOfRange ? { month: 0, day: j, out: true } : null);
+      j++;
+    }
     for (let i = 0; i < flat.length; i += 7) {
       rows.push(makeRow(flat.slice(i, i + 7), rows.length + 1));
     }
@@ -169,8 +178,7 @@ function buildModel(s) {
 }
 
 function makeRow(cells, weekNo) {
-  const first = cells.find((c) => c) || null;
-  return { cells, weekNo, primaryMonth: first ? first.month : null };
+  return { cells, weekNo };
 }
 
 /* ------------------------------ page split ----------------------------- */
@@ -182,7 +190,7 @@ function splitPages(rows, split) {
   let cur = [];
   let prevHadCut = false;
   for (const row of rows) {
-    const hasCut = row.cells.some((c) => c && cutAt.includes(c.month));
+    const hasCut = row.cells.some((c) => c && !c.out && cutAt.includes(c.month));
     // cut before the first row of the new block (transition only)
     if (hasCut && !prevHadCut && cur.length) {
       pages.push(cur);
@@ -209,238 +217,399 @@ function parseEvents(text) {
 }
 
 /* ------------------------------ ranges on a page ------------------------
-   For a page's rows (subset of the full year), compute the contiguous row
-   spans of each month / quarter, using each row's primary month. Contiguous
-   and non-overlapping → safe for CSS grid row spans.
+   For a page's rows compute the contiguous spans of each month / quarter.
+   A month's block begins on the grid row that holds its day 1, so the
+   sidebar dividers line up with the stepped boundary in the day grid.
    ---------------------------------------------------------------------- */
 
 function spansOf(rows, gridRowBase) {
-  const months = [];
-  const quarters = [];
-  let lastQ = null;
-
-  for (let r = 0; r < rows.length; r++) {
-    const pm = rows[r].primaryMonth;
-    if (pm === null) continue;
-
-    const q = Math.floor(pm / 3);
-    if (lastQ !== q) {
-      if (lastQ !== null) quarters[quarters.length - 1].end = gridRowBase + r;
-      quarters.push({ q, start: gridRowBase + r, end: gridRowBase + r + 1 });
-      lastQ = q;
-    } else {
-      quarters[quarters.length - 1].end = gridRowBase + r + 1;
-    }
-  }
-
-  // months: group rows by primary month (monotonic)
-  let lastM = null;
-  for (let r = 0; r < rows.length; r++) {
-    const pm = rows[r].primaryMonth;
-    if (pm === null) continue;
-    if (lastM !== pm) {
-      months.push({ m: pm, start: gridRowBase + r, end: gridRowBase + r + 1 });
-      lastM = pm;
-    } else {
-      months[months.length - 1].end = gridRowBase + r + 1;
-    }
-  }
-
-  // extend the final spans to the bottom of the page (covers trailing blanks)
   const bottom = gridRowBase + rows.length;
-  if (quarters.length) quarters[quarters.length - 1].end = bottom;
-  if (months.length) months[months.length - 1].end = bottom;
+
+  const startRow = {};   // month -> grid row of its day 1
+  const order = [];      // months in order of first appearance on this page
+  const seen = new Set();
+
+  rows.forEach((row, r) => {
+    row.cells.forEach((c) => {
+      if (!c || c.out) return;
+      if (!seen.has(c.month)) { seen.add(c.month); order.push(c.month); }
+      if (c.day === 1 && startRow[c.month] === undefined) {
+        startRow[c.month] = gridRowBase + r;
+      }
+    });
+  });
+
+  const months = order.map((m, i) => {
+    const next = order[i + 1];
+    const start = startRow[m] !== undefined
+      ? startRow[m]
+      : (i === 0 ? gridRowBase : bottom);
+    const end = next !== undefined && startRow[next] !== undefined
+      ? startRow[next]
+      : bottom;
+    return { m, start, end };
+  });
+
+  // quarters are derived from the (contiguous) month spans
+  const quarters = [];
+  months.forEach((sp) => {
+    const q = Math.floor(sp.m / 3);
+    const last = quarters[quarters.length - 1];
+    if (last && last.q === q) last.end = sp.end;
+    else quarters.push({ q, start: sp.start, end: sp.end });
+  });
 
   return { months, quarters };
 }
 
 /* ------------------------------- rendering ------------------------------ */
 
-function render() {
-  const s = readState();
-  const rows = buildModel(s);
-  const pages = splitPages(rows, s.split);
-  const events = s.showEvents ? parseEvents(s.eventsText) : {};
-
-  // auto-fit: compute a cell height so every page fits. Pages with a header
-  // (first page, or all pages when "repeat header" is on) have less vertical
-  // room than headerless pages, so take the strictest fit across pages.
+// auto-fit: pick a cell height so every page fits. Pages that carry a header
+// (the first page, or all pages when "repeat header" is on) have less vertical
+// room, so take the strictest fit across pages.
+function computeCellH(s, pages) {
   const headerH = s.mode === 'generic' ? 13 : HEADER_H;
   const fitPerRow = pages.map((p, i) => {
     const hh = (i === 0 || s.repeatHeader) ? headerH : 0;
     return (s.paperH - s.mt - s.mb - hh) / p.length;
   });
-  const cellH = s.autoFit
+  return s.autoFit
     ? Math.max(2.5, Math.floor(Math.min.apply(null, fitPerRow) * 100) / 100)
     : s.cellH;
-
-  const root = $('#pages');
-  root.innerHTML = '';
-
-  // base page CSS vars
-  const baseVars = {
-    '--paper-w': s.paperW + 'mm',
-    '--paper-h': s.paperH + 'mm',
-    '--mt': s.mt + 'mm', '--mr': s.mr + 'mm',
-    '--mb': s.mb + 'mm', '--ml': s.ml + 'mm',
-    '--cell-h': cellH + 'mm',
-    '--cell-pad': s.cellPad + 'mm',
-    '--head-h': HEADER_H + 'mm',
-    // disabled sidebar columns collapse to 0 so the day columns take the space
-    '--w-q': s.showQuarters ? SIDE_Q : '0mm',
-    '--w-m': SIDE_M,
-    '--w-wk': s.showWeeks ? SIDE_WK : '0mm',
-  };
-
-  // header title is fully user-controlled: empty (or whitespace) = hidden
-  const title = s.headerTitle;
-
-  pages.forEach((pageRows, pi) => {
-    const page = document.createElement('div');
-    page.className = 'page';
-
-    for (const [k, v] of Object.entries(baseVars)) page.style.setProperty(k, v);
-    for (let i = 0; i < 12; i++) {
-      const c = s.colorOf[i];
-      page.style.setProperty('--c' + i, c);
-      page.style.setProperty('--c' + i + 't', mixHex(c, 0.16));
-      page.style.setProperty('--c' + i + 'x', contrast(c));
-    }
-    // header only appears on the first page (or on every page when the
-    // "repeat header" option is enabled)
-    const hasWeekdays = s.mode === 'year';
-    const hasHeader = pi === 0 || s.repeatHeader;
-    const gridRowBase = hasHeader ? (hasWeekdays ? 3 : 2) : 1;
-    page.style.gridTemplateRows =
-      (hasHeader ? (hasWeekdays ? 'auto auto ' : 'auto ') : '') +
-      'repeat(' + pageRows.length + ', var(--cell-h))';
-
-    if (hasHeader) {
-      // ---- title bar ----
-      const head = document.createElement('div');
-      head.className = 'head-title';
-      const sub = s.subtitle || '';
-      head.innerHTML =
-        (title ? '<span class="t-main">' + esc(title) + '</span>' : '') +
-        (sub ? '<span class="t-sub">' + esc(sub) + '</span>' : '') +
-        (pages.length > 1 && s.showRange ? '<span class="t-page">' +
-          (s.split === 2 ? (pi === 0 ? 'Jan – Jun' : 'Jul – Dec') : 'Q' + (pi + 1)) +
-          '</span>' : '');
-      page.appendChild(head);
-
-      // weekday labels + sidebar header row (real dates only — in generic mode
-      // the days of the week are unknown, so there is no weekday header)
-      if (hasWeekdays) {
-        for (let c = 0; c < 3; c++) {
-          const h = document.createElement('div');
-          h.className = 'head-cell' + (c === 2 && s.showWeeks ? ' wk' : '');
-          h.textContent = c === 2 && s.showWeeks ? 'WK' : '';
-          page.appendChild(h);
-        }
-        for (let d = 0; d < 7; d++) {
-          const wd = document.createElement('div');
-          wd.className = 'head-cell wd' + (d === 0 ? ' col0' : '');
-          wd.textContent = WEEKDAYS[(d + s.weekStart) % 7];
-          page.appendChild(wd);
-        }
-      }
-    }
-
-    // sidebar spans
-    const { months, quarters } = spansOf(pageRows, gridRowBase);
-
-    if (s.showQuarters && quarters.length) {
-      const el = document.createElement('div');
-      el.className = 'q-cell s' + (quarters[0].q * 3) % 12;
-      el.style.gridColumn = '1';
-      el.style.gridRow = quarters[0].start + ' / ' + quarters[0].end;
-      el.innerHTML = '<span>' + esc('Q' + (quarters[0].q + 1)) + '</span>';
-      page.appendChild(el);
-      for (let i = 1; i < quarters.length; i++) {
-        const ex = el.cloneNode(true);
-        ex.className = 'q-cell s' + (quarters[i].q * 3) % 12;
-        ex.style.gridRow = quarters[i].start + ' / ' + quarters[i].end;
-        ex.innerHTML = '<span>' + esc('Q' + (quarters[i].q + 1)) + '</span>';
-        page.appendChild(ex);
-      }
-    }
-
-    if (months.length) {
-      months.forEach((sp) => {
-        const el = document.createElement('div');
-        el.className = 'm-cell s' + (sp.m % 12);
-        el.style.gridColumn = '2';
-        el.style.gridRow = sp.start + ' / ' + sp.end;
-        el.innerHTML = '<span>' + esc(MONTHS[sp.m]) + '</span>';
-        page.appendChild(el);
-      });
-    }
-
-    // body rows
-    pageRows.forEach((row, r) => {
-      const gRow = gridRowBase + r;
-
-      if (s.showWeeks) {
-        const wk = document.createElement('div');
-        wk.className = 'wk-cell';
-        wk.style.gridColumn = '3';
-        wk.style.gridRow = gRow;
-        wk.textContent = String(row.weekNo);
-        page.appendChild(wk);
-      }
-
-      row.cells.forEach((cell, d) => {
-        const el = document.createElement('div');
-        const col = 4 + d;
-        el.style.gridColumn = String(col);
-        el.style.gridRow = String(gRow);
-        if (!cell) {
-          // col0: boundary cells keep the separator between sidebar and days
-          el.className = 'day blank' + (d === 0 ? ' col0' : '');
-          page.appendChild(el);
-          return;
-        }
-        let cls = 'day t' + (cell.month % 12);
-        if (hasWeekdays && ((d + s.weekStart) % 7 === 0 || (d + s.weekStart) % 7 === 6)) {
-          cls += ' weekend';
-        }
-        if (d === 0) cls += ' col0';
-        el.className = cls;
-        el.innerHTML = '<span class="dnum">' + cell.day + '</span>';
-        const key = cell.month + '-' + cell.day;
-        const evts = events[key];
-        if (evts && evts.length) {
-          const box = document.createElement('div');
-          box.className = 'evts';
-          evts.forEach((label) => {
-            const b = document.createElement('span');
-            b.className = 'evt';
-            b.textContent = label;
-            box.appendChild(b);
-          });
-          el.appendChild(box);
-        }
-        page.appendChild(el);
-      });
-    });
-
-    root.appendChild(page);
-  });
-
-  updatePrintStyle(s);
-  $('#status').textContent =
-    pages.length + ' page' + (pages.length > 1 ? 's' : '') +
-    ' · ' + rows.length + ' week rows · cell ' + fmt(cellH) + ' mm';
 }
 
-/* --------------------------- print / paper css -------------------------- */
+function render() {
+  const s = readState();
+  const rows = buildModel(s);
+  const pages = splitPages(rows, s.split);
+  const cellH = computeCellH(s, pages);
 
-function updatePrintStyle(s) {
-  const sheet = $('#print-style');
-  sheet.textContent =
-    '@page { size: ' + fmt(s.paperW) + 'mm ' + fmt(s.paperH) + 'mm;' +
-    ' margin: ' + fmt(s.mt) + 'mm ' + fmt(s.mr) + 'mm ' +
-    fmt(s.mb) + 'mm ' + fmt(s.ml) + 'mm; }';
+  schedulePreview(s, pages, cellH);
+}
+
+/* ------------------------------ PDF preview -----------------------------
+   The pane on the right is a genuine PDF. We build the bytes in the browser
+   and hand them to the embedded viewer, so the preview, Download and Print
+   all use exactly the same file.
+   ---------------------------------------------------------------------- */
+
+let pdfUrl = null;
+let pdfName = 'calendar.pdf';
+let previewTimer = null;
+
+function schedulePreview(s, pages, cellH) {
+  clearTimeout(previewTimer);
+  previewTimer = setTimeout(() => buildPreview(s, pages, cellH), 180);
+}
+
+function buildPreview(s, pages, cellH) {
+  let url;
+  try {
+    const bytes = buildPdf(s, pages, cellH);
+    const blob = new Blob([bytes], { type: 'application/pdf' });
+    url = URL.createObjectURL(blob);
+  } catch (err) {
+    console.error('PDF build failed', err);
+    return;
+  }
+  if (pdfUrl) URL.revokeObjectURL(pdfUrl);
+  pdfUrl = url;
+  pdfName = (s.headerTitle ? s.headerTitle.replace(/[^\w.-]+/g, '_') : 'calendar') + '.pdf';
+
+  $('#pdfPreview').src = url;
+}
+
+function downloadPdf() {
+  if (!pdfUrl) return;
+  const a = document.createElement('a');
+  a.href = pdfUrl;
+  a.download = pdfName;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
+function printPdf() {
+  const frame = $('#pdfPreview');
+  try {
+    frame.contentWindow.focus();
+    frame.contentWindow.print();
+  } catch (e) {
+    if (pdfUrl) window.open(pdfUrl, '_blank');
+  }
+}
+
+/* ------------------------------ PDF layout ------------------------------ */
+
+function buildPdf(s, pages, cellH) {
+  const doc = new PdfWriter();
+  const events = s.showEvents ? parseEvents(s.eventsText) : {};
+  pages.forEach((pageRows, pi) => drawPage(doc, s, pageRows, pi, pages, cellH, events));
+  return doc.build();
+}
+
+function drawPage(doc, s, pageRows, pi, pages, cellH, events) {
+  const page = doc.addPage(s.paperW * PT, s.paperH * PT);
+
+  const x0 = s.ml;
+  const gridW = s.paperW - s.ml - s.mr;
+  const gridX2 = x0 + gridW;
+  const hasWeekdays = s.mode === 'year';
+  const hasHeader = pi === 0 || s.repeatHeader;
+
+  // columns: quarter | month | week | 7 day columns
+  const wq = s.showQuarters ? SIDE_W.q : 0;
+  const wm = SIDE_W.m;
+  const wwk = s.showWeeks ? SIDE_W.wk : 0;
+  const dayW = (gridW - wq - wm - wwk) / 7;
+  const colX = [x0, x0 + wq, x0 + wq + wm, x0 + wq + wm + wwk];
+  for (let d = 1; d <= 7; d++) colX[3 + d] = colX[3] + d * dayW;
+
+  const headerH = hasHeader ? (TITLE_H + TITLE_GAP + (hasWeekdays ? WD_H : 0)) : 0;
+  const bodyTop = s.mt + headerH;
+  const bodyBottom = bodyTop + pageRows.length * cellH;
+
+  const gridRowBase = hasHeader ? (hasWeekdays ? 3 : 2) : 1;
+  const yLine = (k) => bodyTop + (k - gridRowBase) * cellH;   // grid line -> mm y
+
+  const mm = (v) => v * PT;
+  const rectFill = (x, y, w, h, c) => page.fillRect(mm(x), mm(y), mm(w), mm(h), c);
+  const line = (x1, y1, x2, y2, c, lw) =>
+    page.line(mm(x1), mm(y1), mm(x2), mm(y2), c, mm(lw == null ? 0.2 : lw));
+
+  // text anchored at (x,y) in mm; y is the baseline. align: left|center|right
+  function text(x, y, str, o) {
+    o = o || {};
+    const sizeMm = o.mm || 3;
+    const sizePt = sizeMm * PT;
+    const w = PdfWriter.textWidth(str, sizePt, !!o.bold) / PT; // mm
+    let px = x;
+    if (o.align === 'center') px = x - w / 2;
+    else if (o.align === 'right') px = x - w;
+    page.text(px * PT, y * PT, str, { size: sizePt, color: o.color, bold: !!o.bold });
+  }
+
+  // rotated (bottom-to-top) text, centred on x within the cell
+  function textV(cx, yBottom, str, o) {
+    o = o || {};
+    const sizeMm = o.mm || 3;
+    page.text((cx + sizeMm * 0.34) * PT, yBottom * PT, str,
+      { size: sizeMm * PT, color: o.color, bold: !!o.bold, rot: 90 });
+  }
+
+  /* ---- header: title + weekday band ---- */
+  if (hasHeader) {
+    const baseline = s.mt + 8.4;
+    let tx = x0;
+    if (s.headerTitle) {
+      text(x0, baseline, s.headerTitle, { mm: 9, bold: true, color: '#14171c' });
+      tx = x0 + PdfWriter.textWidth(s.headerTitle, 9 * PT, true) / PT + 6;
+    }
+    if (s.subtitle) text(tx, baseline, s.subtitle, { mm: 3, color: '#5b6470' });
+    if (pages.length > 1 && s.showRange) {
+      const label = s.split === 2 ? (pi === 0 ? 'Jan – Jun' : 'Jul – Dec') : 'Q' + (pi + 1);
+      text(gridX2, baseline, label, { mm: 3, color: '#5b6470', align: 'right' });
+    }
+    line(x0, s.mt + TITLE_H, gridX2, s.mt + TITLE_H, C_STRONG, 0.6);
+
+    if (hasWeekdays) {
+      const wdTop = s.mt + TITLE_H + TITLE_GAP;
+      const wdBot = wdTop + WD_H;
+      const wdMid = wdTop + WD_H / 2 + 1.0;
+      for (let d = 0; d < 7; d++) {
+        text(colX[3 + d] + dayW / 2, wdMid, WEEKDAYS[(d + s.weekStart) % 7],
+          { mm: 2.8, bold: true, color: '#49505a', align: 'center' });
+      }
+      if (s.showWeeks) {
+        text(colX[2] + wwk / 2, wdTop + WD_H / 2 + 0.85, 'WK',
+          { mm: 2.4, color: '#49505a', align: 'center' });
+      }
+      line(x0, wdBot, gridX2, wdBot, C_STRONG, 0.35);
+      for (let d = 1; d <= 7; d++) {
+        line(colX[3 + d], wdTop, colX[3 + d], wdBot, C_GRID, 0.2);
+      }
+      line(colX[3], wdTop, colX[3], wdBot, C_STRONG, 0.35); // sidebar | days
+    }
+  }
+  // close the top of the grid
+  line(x0, bodyTop, gridX2, bodyTop, C_STRONG, 0.35);
+
+  /* ---- sidebar spans ---- */
+  const { months, quarters } = spansOf(pageRows, gridRowBase);
+  const monthStartRows = new Set(s.showMonthLines ? months.slice(1).map((sp) => sp.start) : []);
+
+  if (s.showQuarters) {
+    quarters.forEach((sp, i) => {
+      const y = yLine(sp.start);
+      const h = yLine(sp.end) - y;
+      const col = s.colorOf[(sp.q * 3) % 12];
+      rectFill(colX[0], y, wq, h, col);
+      text(colX[0] + wq / 2, y + h / 2 + 0.9, 'Q' + (sp.q + 1),
+        { mm: 2.6, bold: true, color: contrast(col), align: 'center' });
+      line(colX[1], y, colX[1], y + h, C_GRID, 0.2);
+      line(colX[0], y + h, colX[1], y + h, C_GRID, 0.2);
+      if (i > 0 && monthStartRows.has(sp.start)) line(colX[0], y, colX[1], y, C_STRONG, 0.5);
+    });
+  }
+
+  months.forEach((sp) => {
+    const y = yLine(sp.start);
+    const h = yLine(sp.end) - y;
+    const col = s.colorOf[sp.m % 12];
+    const label = MONTHS[sp.m];
+    const tw = PdfWriter.textWidth(label, 3.2 * PT, true) / PT; // mm
+    rectFill(colX[1], y, wm, h, col);
+    textV(colX[1] + wm / 2, y + h / 2 + tw / 2, label, { mm: 3.2, bold: true, color: contrast(col) });
+    line(colX[2], y, colX[2], y + h, C_GRID, 0.2);
+    line(colX[1], y + h, colX[2], y + h, C_GRID, 0.2);
+    if (monthStartRows.has(sp.start)) line(colX[1], y, colX[2], y, C_STRONG, 0.5);
+  });
+
+  /* ---- week-number column ---- */
+  if (s.showWeeks) {
+    pageRows.forEach((row, r) => {
+      const y = bodyTop + r * cellH;
+      const gRow = gridRowBase + r;
+      text(colX[2] + wwk / 2, y + cellH / 2 + 0.7, String(row.weekNo),
+        { mm: 2.2, color: '#6a727d', align: 'center' });
+      line(colX[2], y + cellH, colX[3], y + cellH, C_GRID, 0.2);
+      if (monthStartRows.has(gRow)) line(colX[2], y, colX[3], y, C_STRONG, 0.5);
+    });
+  }
+
+  /* ---- day grid ---- */
+  pageRows.forEach((row, r) => {
+    const y = bodyTop + r * cellH;
+    row.cells.forEach((cell, d) => {
+      const x = colX[3 + d];
+      const weekend = hasWeekdays &&
+        ((d + s.weekStart) % 7 === 0 || (d + s.weekStart) % 7 === 6);
+
+      let bg = '#ffffff';
+      if (cell && !cell.out) {
+        bg = mixHex(s.colorOf[cell.month % 12], 0.16);
+        if (weekend) bg = mixHex(bg, 0.045, [0, 0, 0]);
+      } else if (cell && cell.out) {
+        bg = '#f4f5f7';
+      }
+      rectFill(x, y, dayW, cellH, bg);
+
+      // right + bottom borders (shared edges, drawn per cell)
+      line(x + dayW, y, x + dayW, y + cellH, C_GRID, 0.2);
+      line(x, y + cellH, x + dayW, y + cellH, C_GRID, 0.2);
+
+      // left edge: heavier where a new month starts mid-row, else the strong
+      // sidebar/day divider on the first column
+      const left = d > 0 ? row.cells[d - 1] : null;
+      if (cell && s.showMonthLines && left && left.month !== cell.month) {
+        line(x, y, x, y + cellH, C_STRONG, 0.5);
+      } else if (d === 0) {
+        line(x, y, x, y + cellH, C_STRONG, 0.35);
+      }
+
+      // top edge: heavier where the cell above belongs to another month
+      if (cell) {
+        const above = r > 0 ? pageRows[r - 1].cells[d] : undefined;
+        if (s.showMonthLines && (above === null || (above && above.month !== cell.month))) {
+          line(x, y, x + dayW, y, C_STRONG, 0.5);
+        }
+      }
+
+      if (!cell) return;
+
+      const pad = s.cellPad;
+      const numColor = cell.out ? '#9aa3ad' : (weekend ? C_NUM_WK : C_NUM);
+      text(x + pad, y + pad + 2.0, String(cell.day),
+        { mm: 2.7, bold: true, color: numColor });
+
+      if (cell.out) return; // out-of-range days carry no events
+
+      const evts = events[cell.month + '-' + cell.day];
+      if (evts && evts.length) {
+        let ey = y + pad + 2.5;
+        const maxW = dayW - pad * 2;
+        evts.forEach((label) => {
+          if (ey + 2.6 > y + cellH) return;
+          rectFill(x + pad, ey, maxW, 2.6, mixHex(bg, 0.82, [20, 25, 33]));
+          let t = label;
+          while (t.length > 1 && PdfWriter.textWidth(t, 1.9 * PT, true) / PT > maxW - 1.2) {
+            t = t.slice(0, -1);
+          }
+          text(x + pad + 0.6, ey + 1.85, t, { mm: 1.9, bold: true, color: '#ffffff' });
+          ey += 2.9;
+        });
+      }
+    });
+  });
+}
+
+/* --------------------------- settings persistence -----------------------
+   The whole panel is plain form controls, so we snapshot every field into a
+   flat JSON object (keyed by id, radios by name) plus the master palette,
+   and restore it on load. Versioned so a future schema change can be ignored
+   instead of crashing.
+   ---------------------------------------------------------------------- */
+
+const STORAGE_KEY = 'planner-calendar:v1';
+
+function collectFormState() {
+  const data = {};
+  $$('#panel input, #panel select, #panel textarea').forEach((el) => {
+    if (el.type === 'radio') {
+      if (el.checked) data['radio:' + el.name] = el.value;
+      return;
+    }
+    if (!el.id) return; // palette swatch / hex inputs are stored below
+    data[el.id] = el.type === 'checkbox' ? el.checked : el.value;
+  });
+  data.__colors = masterColors.slice();
+  return data;
+}
+
+function applyFormState(data) {
+  if (!data || typeof data !== 'object') return;
+  $$('#panel input, #panel select, #panel textarea').forEach((el) => {
+    if (el.type === 'radio') {
+      const saved = data['radio:' + el.name];
+      if (saved !== undefined) el.checked = el.value === saved;
+      return;
+    }
+    if (!el.id || !(el.id in data)) return;
+    if (el.type === 'checkbox') el.checked = !!data[el.id];
+    else el.value = data[el.id];
+  });
+  if (Array.isArray(data.__colors) && data.__colors.length === 12) {
+    for (let i = 0; i < 12; i++) {
+      masterColors[i] = normalizeHex(data.__colors[i]) || masterColors[i];
+    }
+  }
+}
+
+let saveTimer = null;
+let suppressSave = false; // set while resetting so pagehide doesn't re-save
+function flushFormState() {
+  if (suppressSave) return;
+  clearTimeout(saveTimer);
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(collectFormState())); }
+  catch (e) { /* storage unavailable (private mode / quota) — ignore */ }
+}
+function saveFormState() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(flushFormState, 150);
+}
+
+function loadFormState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) applyFormState(JSON.parse(raw));
+  } catch (e) { /* corrupt or unreadable — fall back to defaults */ }
+}
+
+function resetFormState() {
+  suppressSave = true;
+  clearTimeout(saveTimer);
+  try { localStorage.removeItem(STORAGE_KEY); } catch (e) { /* ignore */ }
+  location.reload();
 }
 
 /* ------------------------------ UI wiring ------------------------------- */
@@ -494,7 +663,7 @@ function buildPaletteUI() {
 
 function wireUI() {
   const panel = $('#panel');
-  const rerender = () => render();
+  const rerender = () => { render(); saveFormState(); };
   panel.addEventListener('input', rerender);
   panel.addEventListener('change', rerender);
 
@@ -516,11 +685,12 @@ function wireUI() {
     render();
   });
 
-  $('#printBtn').addEventListener('click', () => window.print());
+  $('#downloadBtn').addEventListener('click', downloadPdf);
+  $('#printBtn').addEventListener('click', printPdf);
+  $('#resetBtn').addEventListener('click', resetFormState);
 
-  $('#zoom').addEventListener('input', (e) => {
-    $('.pages').style.zoom = e.target.value;
-  });
+  // make sure a pending (debounced) save is written before the tab goes away
+  window.addEventListener('pagehide', flushFormState);
 
   $('#cellH').addEventListener('input', (e) => {
     $('#cellHOut').textContent = e.target.value + ' mm';
@@ -532,6 +702,7 @@ function wireUI() {
 
 /* --------------------------------- init -------------------------------- */
 
+loadFormState();
 buildPaletteUI();
 wireUI();
 render();

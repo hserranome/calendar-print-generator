@@ -205,6 +205,23 @@ input[type="range"] {
   cursor: pointer;
 }
 .print-btn:hover { filter: brightness(1.08); }
+
+.btn-row { display: flex; gap: 8px; margin-top: 8px; }
+.btn-row .ghost-btn { margin-top: 0; }
+
+.ghost-btn {
+  width: 100%;
+  margin-top: 8px;
+  padding: 9px;
+  border: 1px solid var(--ui-line);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ui-dim);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.ghost-btn:hover { color: var(--ui-text); border-color: var(--ui-accent); }
 .hint {
   font-size: 11px;
   color: var(--ui-dim);
@@ -221,25 +238,19 @@ input[type="range"] {
   overflow: hidden;
 }
 
-.preview-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 10px 16px;
-  border-bottom: 1px solid var(--ui-line);
-  background: var(--ui-panel);
-}
-.status { font-size: 12px; color: var(--ui-dim); }
-.zoom { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--ui-dim); }
-.zoom input { width: 160px; }
-
 .preview-scroll {
   flex: 1;
-  overflow: auto;
-  padding: 24px;
-  background:
-    radial-gradient(circle at 50% 0%, #1d2530 0%, var(--ui-bg) 60%);
+  min-height: 0;
+  overflow: hidden;
+  background: #10141a;
+}
+
+#pdfPreview {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: #fff;
 }
 
 .pages {
@@ -367,6 +378,17 @@ input[type="range"] {
   overflow: hidden;
 }
 .day.blank { background: #fff; }
+
+/* heavier rules marking month boundaries — drawn per day-cell so the line
+   follows the real first/last days of each month (a stepped outline). The
+   sidebar / week columns keep a straight divider between month blocks. */
+.day.mbt { border-top: .5mm solid var(--grid-strong); }
+.day.mbl { border-left: .5mm solid var(--grid-strong); }
+.wk-cell.mb,
+.m-cell.mb,
+.q-cell.mb {
+  border-top: .5mm solid var(--grid-strong);
+}
 .day.weekend { background-image: linear-gradient(rgba(0, 0, 0, .045), rgba(0, 0, 0, .045)); }
 .day .dnum {
   font-size: 2.7mm;

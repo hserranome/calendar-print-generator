@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Planner Calendar Generator</title>
+  <link rel="icon" href="data:," />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -54,6 +55,8 @@
           <div class="toggles">
             <label class="check"><input type="checkbox" id="showWeeks" /><i>Week numbers</i></label>
             <label class="check"><input type="checkbox" id="showQuarters" checked /><i>Quarter labels</i></label>
+            <label class="check"><input type="checkbox" id="showMonthLines" checked /><i>Month boundary lines</i></label>
+            <label class="check"><input type="checkbox" id="showOutOfRange" checked /><i>Show out-of-range dates</i></label>
             <label class="check"><input type="checkbox" id="showEvents" checked /><i>Custom events</i></label>
           </div>
         </div>
@@ -145,26 +148,23 @@
         </label>
       </section>
 
-      <button type="button" class="print-btn" id="printBtn">Print / Save as PDF</button>
-      <p class="hint">Tip: in the print dialog enable <b>Background graphics</b> so colors print.</p>
+      <button type="button" class="print-btn" id="downloadBtn">Download PDF</button>
+      <div class="btn-row">
+        <button type="button" class="ghost-btn" id="printBtn">Print</button>
+        <button type="button" class="ghost-btn" id="resetBtn">Reset</button>
+      </div>
+      <p class="hint">The preview is the exact PDF — use its toolbar to zoom or change page.</p>
     </aside>
 
     <!-- ============ PREVIEW ============ -->
     <main class="preview">
-      <div class="preview-bar">
-        <div class="status" id="status">Ready</div>
-        <label class="zoom">
-          <span>Zoom</span>
-          <input type="range" id="zoom" min="0.25" max="1.5" step="0.05" value="0.75" />
-        </label>
-      </div>
       <div class="preview-scroll">
-        <div class="pages" id="pages"></div>
+        <iframe id="pdfPreview" title="Calendar PDF preview"></iframe>
       </div>
     </main>
   </div>
 
-  <style id="print-style"></style>
+  <script src="pdf.js"></script>
   <script src="script.js"></script>
 </body>
 </html>
