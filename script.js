@@ -111,7 +111,7 @@ function readState() {
     showEvents: $('#showEvents').checked,
     eventsText: $('#events').value,
     colorOf,
-    split: parseInt($('#split').value, 10) || 1,
+    split: Math.max(1, Math.min(12, parseInt($('#split').value, 10) || 1)),
     repeatHeader: $('#repeatHeader').checked,
     showRange: $('#showRange').checked,
     paperW: landscape ? paper.h : paper.w,
@@ -197,18 +197,26 @@ function cutMonths(split) {
 
 function splitPages(rows, split) {
   if (split <= 1) return [rows];
-  const cutAt = cutMonths(split); // months that start a new page
+  const cuts = cutMonths(split);
+  // a month's page block = how many cut points it has passed
+  const blockOf = (m) => { let b = 0; for (const c of cuts) if (m >= c) b++; return b; };
+
   const pages = [];
   let cur = [];
-  let prevHadCut = false;
+  let curBlock = -1;
   for (const row of rows) {
-    const hasCut = row.cells.some((c) => c && !c.out && cutAt.includes(c.month));
-    // cut before the first row of the new block (transition only)
-    if (hasCut && !prevHadCut && cur.length) {
+    // the row joins the block of its latest in-range month, so a new page
+    // starts on the row that first holds the cut month (keeping its day 1)
+    let maxM = -1;
+    for (const c of row.cells) {
+      if (c && !c.out && c.month > maxM) maxM = c.month;
+    }
+    const b = maxM < 0 ? curBlock : blockOf(maxM);
+    if (b !== curBlock && cur.length) {
       pages.push(cur);
       cur = [];
     }
-    prevHadCut = hasCut;
+    curBlock = b;
     cur.push(row);
   }
   if (cur.length) pages.push(cur);
@@ -426,8 +434,8 @@ function drawPage(doc, s, pageRows, pi, pages, cellH, events) {
       const cuts = cutMonths(s.split);
       const lo = pi === 0 ? 0 : (cuts[pi - 1] != null ? cuts[pi - 1] : 0);
       const hi = ((pi < cuts.length ? cuts[pi] : 12) - 1);
-      text(gridX2, baseline, MONTHS_TITLE[lo] + ' – ' + MONTHS_TITLE[hi],
-        { mm: 3, color: '#5b6470', align: 'right' });
+      const label = lo === hi ? MONTHS_TITLE[lo] : MONTHS_TITLE[lo] + ' – ' + MONTHS_TITLE[hi];
+      text(gridX2, baseline, label, { mm: 3, color: '#5b6470', align: 'right' });
     }
     line(x0, s.mt + TITLE_H, gridX2, s.mt + TITLE_H, C_STRONG, 0.6);
 

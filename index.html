@@ -112,13 +112,8 @@
         </div>
 
         <label class="field">
-          <span>Page split</span>
-          <select id="split">
-            <option value="1">1 page (full year)</option>
-            <option value="2" selected>2 pages (half-year)</option>
-            <option value="3">3 pages (four months each)</option>
-            <option value="4">4 pages (quarterly)</option>
-          </select>
+          <span>Pages <em>(1–12)</em></span>
+          <input type="number" id="split" min="1" max="12" step="1" value="2" />
         </label>
 
         <label class="check standalone">
